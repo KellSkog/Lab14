@@ -1,6 +1,6 @@
 /*
  * File:   main.c
- * Author: Martina
+ * Author: Kell
  *
  * Created on den 20 januari 2018, 11:21
  * Config information:
@@ -20,6 +20,8 @@
 #pragma config EBTRB=OFF//Register: CONFIG7H @ 0x30000D
 
 #include <xc.h>
+#include <stdio.h>
+#include <stdint.h>
 void interrupt high_priority isrHigh() {
     
 }
@@ -28,7 +30,7 @@ void interrupt low_priority isrLow() {
 }
 void setupUART() {
     //Based on Fosc = 1MHz,default on Reset
-    TRISC = 0b11000000;
+    TRISC = 0b10111111;//RC6 is TX is output
     //TXSTA Register
     TXEN = 1;
     SYNC = 0;
@@ -43,7 +45,35 @@ void setupUART() {
     SPBRGH = 0;
     SPBRG = 25;//9600 bits/s
 }
+void setupADC() {
+    TRISA = TRISA | 0b00000001;//RA0 is input
+    ANS0 = 1; //RA0 is analog
+    ADCON0 = 1;//Channel AN0, ADC enabled
+    ADCON1 = 0;//Neg Ref = VSS, Pos ref = VDD
+    ADCON2 = 0b10111110;//ADFM = Left, ACQT = 20TAD, ADCS = Fosc/64
+}
+uint8_t readADC() {
+    ADCON0bits.GO = 1;
+    while (ADCON0bits.NOT_DONE);
+    return ADRESL;
+}
+void putch(char data)
+{
+    while( ! TXIF);//Wait for TXIF
+    TXREG = data;
+}
 void main(void) {
     setupUART();
+    setupADC();
+    printf("The quick brown fox jumps over the lazy dog\n\r");
+    uint8_t adLow;
+    float voltage;
+    while(1) {
+        adLow = readADC();//returns with ADRESL when ADRESL & ADRESH is avail.
+        voltage = 5 * (ADRESH * 256 + adLow) / 1023.0;
+        printf("[%.2f], ", voltage);
+        _delay(125000);
+        //Sleep(500);//Power down
+    }
     return;
 }
